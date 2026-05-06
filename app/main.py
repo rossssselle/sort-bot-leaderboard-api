@@ -199,3 +199,5 @@ def get_leaderboard(
         )
 
     return LeaderboardOut(entries=leaderboard, total_bots=len(leaderboard))
+
+
