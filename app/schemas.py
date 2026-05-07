@@ -1,10 +1,8 @@
 
-
 from datetime import datetime
-
-from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
 # Request models for creating a new bot
 class BotCreate(BaseModel):
@@ -39,14 +37,22 @@ class BotOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-# Full bot details including benchmark results
-class BotDetail(BotOut):
-    results: list[BenchmarkResultOut] = []
+class PerformanceStats(BaseModel):
     avg_time_ms: Optional[float] = None
+    median_time_ms: Optional[float] = None
+    best_time_ms: Optional[float] = None
+    worst_time_ms: Optional[float] = None
+    best_case: Optional[str] = None   # e.g. "small/case_3"
+    worst_case: Optional[str] = None  # e.g. "large/case_12"
+    p25_time_ms: Optional[float] = None
+    p75_time_ms: Optional[float] = None
     total_correct: int = 0
     total_cases: int = 0
 
-# Row in leaderboard
+class BotDetail(BotOut):
+    results: List[BenchmarkResultOut] = []
+    performance: Optional[PerformanceStats] = None
+
 class LeaderboardEntry(BaseModel):
     rank: int
     bot_id: int

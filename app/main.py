@@ -20,6 +20,7 @@ from app.schemas import (
     InputSetOut,
     LeaderboardEntry,
     LeaderboardOut,
+    PerformanceStats,
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -102,7 +103,6 @@ def create_bot(body: BotCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(bot)
     return bot
-
 
 @app.get("/leaderboard", response_model=LeaderboardOut, tags=["leaderboard"])
 def get_leaderboard(
@@ -200,4 +200,76 @@ def get_leaderboard(
 
     return LeaderboardOut(entries=leaderboard, total_bots=len(leaderboard))
 
+@app.get("/bots/{bot_id}", response_model=BotDetail, tags=["bots"])
+def get_bot(bot_id: int, db: Session = Depends(get_db)):
+    bot = db.query(Bot).filter(Bot.id == bot_id).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found.")
 
+    results = (
+        db.query(BenchmarkResult)
+        .filter(BenchmarkResult.bot_id == bot_id)
+        .all()
+    )
+
+    result_list = []
+    for r in results:
+        result_list.append(
+            BenchmarkResultOut(
+                input_set=r.input_set.name,
+                case_index=r.case_index,
+                time_ms=r.time_ms,
+                is_correct=r.is_correct,
+            )
+        )
+
+    # Compute performance stats (exclude timed out results with time_ms=-1)
+    valid_results = [r for r in results if r.time_ms >= 0]
+    valid_times = [r.time_ms for r in valid_results]
+
+    if valid_times:
+        sorted_times = sorted(valid_times)
+        n = len(sorted_times)
+
+        # Find best and worst cases
+        best_r = min(valid_results, key=lambda r: r.time_ms)
+        worst_r = max(valid_results, key=lambda r: r.time_ms)
+
+        # Percentiles (nearest rank method)
+        p25_idx = max(0, int(n * 0.25) - 1)
+        p75_idx = max(0, int(n * 0.75) - 1)
+
+        perf = PerformanceStats(
+            avg_time_ms=round(statistics.mean(valid_times), 4),
+            median_time_ms=round(statistics.median(valid_times), 4),
+            best_time_ms=round(sorted_times[0], 4),
+            worst_time_ms=round(sorted_times[-1], 4),
+            best_case=f"{best_r.input_set.name}/case_{best_r.case_index}",
+            worst_case=f"{worst_r.input_set.name}/case_{worst_r.case_index}",
+            p25_time_ms=round(sorted_times[p25_idx], 4),
+            p75_time_ms=round(sorted_times[p75_idx], 4),
+            total_correct=sum(1 for r in results if r.is_correct),
+            total_cases=len(results),
+        )
+    else:
+        perf = PerformanceStats(
+            total_correct=0,
+            total_cases=len(results),
+        )
+
+    return BotDetail(
+        id=bot.id,
+        name=bot.name,
+        algorithm=bot.algorithm,
+        created_at=bot.created_at,
+        results=result_list,
+        performance=perf,
+    )
+
+
+@app.get("/algorithms", response_model=list[AlgorithmOut], tags=["info"])
+def list_algorithms():
+    return [
+        AlgorithmOut(name=name, description=info["description"])
+        for name, info in ALGORITHM_REGISTRY.items()
+    ]
