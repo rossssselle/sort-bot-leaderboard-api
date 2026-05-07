@@ -17,7 +17,6 @@ from app.schemas import (
     BotCreate,
     BotDetail,
     BotOut,
-    InputSetOut,
     LeaderboardEntry,
     LeaderboardOut,
     PerformanceStats,
@@ -231,11 +230,11 @@ def get_bot(bot_id: int, db: Session = Depends(get_db)):
         sorted_times = sorted(valid_times)
         n = len(sorted_times)
 
-        # Find best and worst cases
         best_r = min(valid_results, key=lambda r: r.time_ms)
         worst_r = max(valid_results, key=lambda r: r.time_ms)
 
-        # Percentiles (nearest rank method)
+        # Percentiles (nearest rank method) are slightly off
+        # TODO: Could use statistics.quantiles()
         p25_idx = max(0, int(n * 0.25) - 1)
         p75_idx = max(0, int(n * 0.75) - 1)
 
